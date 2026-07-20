@@ -753,7 +753,7 @@
 
 <header class="hero" id="hero">
   <div class="hero-media" id="portraitTravel" aria-hidden="true">
-    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" muted playsinline preload="auto" autoplay fetchpriority="high"></video>
+    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" muted playsinline preload="auto"></video>
   </div>
 
   <div class="wrap hero-grid">
@@ -841,7 +841,7 @@
   <div class="projects-stage">
     <!-- decorative full-bleed backdrop video -->
     <div class="proj-bg" aria-hidden="true">
-      <video class="proj-video" id="projVideo" data-src="assets/teresa_open_hands.mp4" muted loop playsinline preload="none"></video>
+      <video class="proj-video" src="assets/teresa_open_hands.mp4" autoplay muted loop playsinline preload="auto"></video>
       <div class="proj-scrim"></div>
     </div>
 
@@ -1397,263 +1397,172 @@
 })();
 </script>
 
-<script>
-/* -------------------------------------------------------------------
-   Lazy-load the decorative projects background video.
-   It only starts downloading once the #projects section is close to
-   the viewport, so it never competes with the hero video on first
-   paint. Once loaded, the browser's HTTP cache (see cache headers)
-   keeps it from being re-downloaded on repeat visits.
-------------------------------------------------------------------- */
-(function(){
-  var projVideo = document.getElementById('projVideo');
-  var projSection = document.getElementById('projects');
-  if(!projVideo || !projSection) return;
-
-  var loaded = false;
-  function loadProjVideo(){
-    if(loaded) return;
-    loaded = true;
-    var src = projVideo.getAttribute('data-src');
-    if(src){
-      projVideo.src = src;
-      projVideo.load();
-      var p = projVideo.play();
-      if(p && p.catch) p.catch(function(){});
-    }
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
   }
-
-  if('IntersectionObserver' in window){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting){
-          loadProjVideo();
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '600px 0px' }); // start loading well before it scrolls into view
-    io.observe(projSection);
-  } else {
-    // Fallback: load after everything else settles.
-    window.addEventListener('load', loadProjVideo);
-  }
-})();
-</script>
-
-<script>
-/* -------------------------------------------------------------------
-   3D model viewer: three.js + the .glb are only fetched once the
-   #model section is about to enter the viewport. This keeps the
-   (fairly heavy) three.js bundle and model file off the critical
-   path so the hero video is never delayed by them.
-------------------------------------------------------------------- */
-(function(){
-  var modelSection = document.getElementById('model');
-  var viewport   = document.getElementById('modelViewport');
-  var canvas     = document.getElementById('modelCanvas');
-  var status     = document.getElementById('modelStatus');
-  var statusText = document.getElementById('modelStatusText');
-  var progressBar= document.getElementById('modelProgressBar');
-  var btnReset   = document.getElementById('btnReset');
-  var btnRotate  = document.getElementById('btnRotate');
-  var btnFullscreen = document.getElementById('btnFullscreen');
-  if(!modelSection || !viewport || !canvas) return;
-
-  var initialized = false;
-
-  function initModelViewer(){
-    if(initialized) return;
-    initialized = true;
-
-    Promise.all([
-      import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'),
-      import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
-      import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DRACOLoader.js'),
-      import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js')
-    ]).then(function(mods){
-      var THREE = mods[0];
-      var GLTFLoader = mods[1].GLTFLoader;
-      var DRACOLoader = mods[2].DRACOLoader;
-      var OrbitControls = mods[3].OrbitControls;
-
-      var defaultCamPos = null;
-
-      var scene = new THREE.Scene();
-
-      var camera = new THREE.PerspectiveCamera(
-        40,
-        viewport.clientWidth / Math.max(viewport.clientHeight, 1),
-        0.01,
-        1000
-      );
-      camera.position.set(3, 2, 5);
-
-      var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
-      if('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-      scene.add(new THREE.HemisphereLight(0xaab0ff, 0x0a0c18, 1.1));
-      var key = new THREE.DirectionalLight(0xffffff, 1.7);
-      key.position.set(4, 5, 6);
-      scene.add(key);
-      var rim = new THREE.DirectionalLight(0x4fd6d0, 1.0);
-      rim.position.set(-5, 2, -4);
-      scene.add(rim);
-      var fill = new THREE.DirectionalLight(0x8b7bff, 0.5);
-      fill.position.set(-2, -3, 4);
-      scene.add(fill);
-
-      var controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
-      controls.enablePan = false;
-      controls.minDistance = 0.4;
-      controls.maxDistance = 25;
-      controls.autoRotate = true;
-      controls.autoRotateSpeed = 1.4;
-
-      var loader = new GLTFLoader();
-
-      var dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
-      loader.setDRACOLoader(dracoLoader);
-
-      loader.load(
-        'assets/models/teresa.glb',
-        function(gltf){
-          var model = gltf.scene;
-
-          var box = new THREE.Box3().setFromObject(model);
-          var size = box.getSize(new THREE.Vector3());
-          var center = box.getCenter(new THREE.Vector3());
-          model.position.sub(center);
-
-          var maxDim = Math.max(size.x, size.y, size.z) || 1;
-          var scale = 2.4 / maxDim;
-          model.scale.setScalar(scale);
-
-          scene.add(model);
-
-          var dist = 5;
-          camera.position.set(dist * 0.55, dist * 0.35, dist);
-          camera.near = dist / 100;
-          camera.far = dist * 100;
-          camera.updateProjectionMatrix();
-          controls.target.set(0, 0, 0);
-          controls.update();
-
-          defaultCamPos = camera.position.clone();
-
-          if(status) status.classList.add('hidden');
-        },
-        function(xhr){
-          if(xhr.lengthComputable){
-            var pct = Math.round((xhr.loaded / xhr.total) * 100);
-            if(statusText) statusText.textContent = 'Loading model… ' + pct + '%';
-            if(progressBar) progressBar.style.width = pct + '%';
-          }
-        },
-        function(err){
-          if(status) status.classList.remove('hidden');
-          var spinner = status ? status.querySelector('.model-spinner') : null;
-          if(spinner) spinner.style.display = 'none';
-          if(statusText) statusText.textContent = 'Could not load the 3D model — serve this page over http(s), not as a local file.';
-          console.error('GLTF load error:', err);
-        }
-      );
-
-      if(btnReset){
-        btnReset.addEventListener('click', function(){
-          if(!defaultCamPos) return;
-          camera.position.copy(defaultCamPos);
-          controls.target.set(0, 0, 0);
-          controls.update();
-        });
-      }
-
-      if(btnRotate){
-        btnRotate.classList.add('active');
-        btnRotate.addEventListener('click', function(){
-          controls.autoRotate = !controls.autoRotate;
-          btnRotate.classList.toggle('active', controls.autoRotate);
-        });
-      }
-
-      if(btnFullscreen && viewport.requestFullscreen){
-        btnFullscreen.addEventListener('click', function(){
-          if(document.fullscreenElement){
-            document.exitFullscreen();
-          } else {
-            viewport.requestFullscreen();
-          }
-        });
-        document.addEventListener('fullscreenchange', function(){
-          var isFull = document.fullscreenElement === viewport;
-          btnFullscreen.textContent = isFull ? 'Exit fullscreen' : 'Fullscreen';
-          btnFullscreen.classList.toggle('active', isFull);
-          resize();
-        });
-      } else if(btnFullscreen){
-        btnFullscreen.style.display = 'none';
-      }
-
-      function resize(){
-        var w = viewport.clientWidth, h = viewport.clientHeight;
-        if(!w || !h) return;
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
-      }
-      window.addEventListener('resize', resize);
-      if(window.ResizeObserver){
-        new ResizeObserver(resize).observe(viewport);
-      }
-
-      function animate(){
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-      }
-      animate();
-    }).catch(function(err){
-      if(status) status.classList.remove('hidden');
-      var spinner = status ? status.querySelector('.model-spinner') : null;
-      if(spinner) spinner.style.display = 'none';
-      if(statusText) statusText.textContent = 'Could not load the 3D viewer.';
-      console.error('three.js load error:', err);
-    });
-  }
-
-  if('IntersectionObserver' in window){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting){
-          initModelViewer();
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '400px 0px' });
-    io.observe(modelSection);
-  } else {
-    window.addEventListener('load', initModelViewer);
-  }
-})();
-</script>
-
-<script>
-/* -------------------------------------------------------------------
-   Register a service worker so that once a visitor has loaded the
-   heavy assets (videos, 3D model, decoder files) once, repeat visits
-   are served straight from the cache instead of re-downloading them.
-------------------------------------------------------------------- */
-if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('/sw.js').catch(function(err){
-      console.warn('Service worker registration failed:', err);
-    });
-  });
 }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  (function(){
+    var viewport   = document.getElementById('modelViewport');
+    var canvas     = document.getElementById('modelCanvas');
+    var status     = document.getElementById('modelStatus');
+    var statusText = document.getElementById('modelStatusText');
+    var progressBar= document.getElementById('modelProgressBar');
+    var btnReset   = document.getElementById('btnReset');
+    var btnRotate  = document.getElementById('btnRotate');
+    var btnFullscreen = document.getElementById('btnFullscreen');
+    if(!viewport || !canvas) return;
+
+    var defaultCamPos = null;
+
+    var scene = new THREE.Scene();
+
+    var camera = new THREE.PerspectiveCamera(
+      40,
+      viewport.clientWidth / Math.max(viewport.clientHeight, 1),
+      0.01,
+      1000
+    );
+    camera.position.set(3, 2, 5);
+
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    if('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    scene.add(new THREE.HemisphereLight(0xaab0ff, 0x0a0c18, 1.1));
+    var key = new THREE.DirectionalLight(0xffffff, 1.7);
+    key.position.set(4, 5, 6);
+    scene.add(key);
+    var rim = new THREE.DirectionalLight(0x4fd6d0, 1.0);
+    rim.position.set(-5, 2, -4);
+    scene.add(rim);
+    var fill = new THREE.DirectionalLight(0x8b7bff, 0.5);
+    fill.position.set(-2, -3, 4);
+    scene.add(fill);
+
+    var controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan = false;
+    controls.minDistance = 0.4;
+    controls.maxDistance = 25;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 1.4;
+
+    var loader = new GLTFLoader();
+
+    var dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
+    loader.setDRACOLoader(dracoLoader);
+
+    loader.load(
+      'assets/models/teresa.glb',
+      function(gltf){
+        var model = gltf.scene;
+
+        var box = new THREE.Box3().setFromObject(model);
+        var size = box.getSize(new THREE.Vector3());
+        var center = box.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+
+        var maxDim = Math.max(size.x, size.y, size.z) || 1;
+        var scale = 2.4 / maxDim;
+        model.scale.setScalar(scale);
+
+        scene.add(model);
+
+        var dist = 5;
+        camera.position.set(dist * 0.55, dist * 0.35, dist);
+        camera.near = dist / 100;
+        camera.far = dist * 100;
+        camera.updateProjectionMatrix();
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        defaultCamPos = camera.position.clone();
+
+        if(status) status.classList.add('hidden');
+      },
+      function(xhr){
+        if(xhr.lengthComputable){
+          var pct = Math.round((xhr.loaded / xhr.total) * 100);
+          if(statusText) statusText.textContent = 'Loading model… ' + pct + '%';
+          if(progressBar) progressBar.style.width = pct + '%';
+        }
+      },
+      function(err){
+        if(status) status.classList.remove('hidden');
+        var spinner = status ? status.querySelector('.model-spinner') : null;
+        if(spinner) spinner.style.display = 'none';
+        if(statusText) statusText.textContent = 'Could not load the 3D model — serve this page over http(s), not as a local file.';
+        console.error('GLTF load error:', err);
+      }
+    );
+
+    if(btnReset){
+      btnReset.addEventListener('click', function(){
+        if(!defaultCamPos) return;
+        camera.position.copy(defaultCamPos);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      });
+    }
+
+    if(btnRotate){
+      btnRotate.classList.add('active');
+      btnRotate.addEventListener('click', function(){
+        controls.autoRotate = !controls.autoRotate;
+        btnRotate.classList.toggle('active', controls.autoRotate);
+      });
+    }
+
+    if(btnFullscreen && viewport.requestFullscreen){
+      btnFullscreen.addEventListener('click', function(){
+        if(document.fullscreenElement){
+          document.exitFullscreen();
+        } else {
+          viewport.requestFullscreen();
+        }
+      });
+      document.addEventListener('fullscreenchange', function(){
+        var isFull = document.fullscreenElement === viewport;
+        btnFullscreen.textContent = isFull ? 'Exit fullscreen' : 'Fullscreen';
+        btnFullscreen.classList.toggle('active', isFull);
+        resize();
+      });
+    } else if(btnFullscreen){
+      btnFullscreen.style.display = 'none';
+    }
+
+    function resize(){
+      var w = viewport.clientWidth, h = viewport.clientHeight;
+      if(!w || !h) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resize);
+    if(window.ResizeObserver){
+      new ResizeObserver(resize).observe(viewport);
+    }
+
+    function animate(){
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  })();
 </script>
 
 </body>
