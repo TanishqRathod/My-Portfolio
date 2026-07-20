@@ -28,15 +28,25 @@
 </script>
 
 <!--
-  Preload hints: tell the browser about both videos as early as
-  possible (before it has even parsed the <body>), but mark them
-  with different fetchpriority so the hero video always wins the
-  race for bandwidth. The projects video still starts downloading
-  in parallel in the background, so by the time the visitor scrolls
-  down to it, it's already buffered.
+  Loading priority, deliberately in this order:
+    1) the 3D model (glb + the three.js modules that render it)
+    2) the projects-section background video
+    3) the hero video
+  fetchpriority + rel=preload/modulepreload tell the browser this
+  order regardless of where each asset sits in the document or when
+  its owning section scrolls into view. The model's own script no
+  longer waits for its section to be near the viewport (see the
+  IntersectionObserver note further down) — it starts as soon as the
+  page does, so these hints actually matter.
 -->
-<link rel="preload" as="video" href="assets/teresa.mp4" fetchpriority="high">
-<link rel="preload" as="video" href="assets/teresa_open_hands.mp4" fetchpriority="low">
+<link rel="preload" as="fetch" href="assets/models/teresa.glb" fetchpriority="high" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" fetchpriority="high" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" fetchpriority="high" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DRACOLoader.js" fetchpriority="high" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js" fetchpriority="high" crossorigin>
+
+<link rel="preload" as="video" href="assets/teresa_open_hands.mp4" fetchpriority="high">
+<link rel="preload" as="video" href="assets/teresa.mp4" fetchpriority="low">
 
 <style>
   :root{
@@ -340,13 +350,31 @@
     isolation:isolate;
   }
   .proj-bg{position:absolute;inset:0;z-index:0;}
+  /* Placeholder art shown until the video reports it can actually
+     play — same crossfade pattern as the hero: the image is visible
+     from the first paint (no network wait), and .video-ready (added
+     on the video's 'canplay' event) fades it out as the video fades
+     in on top of it. */
+  .proj-poster{
+    position:absolute;inset:0;
+    width:100%;height:100%;
+    display:block;
+    object-fit:cover;
+    object-position:50% 30%;
+    background:var(--bg-1);
+  }
   .proj-video{
+    position:absolute;inset:0;
     width:100%;height:100%;
     display:block;
     object-fit:cover;
     object-position:50% 18%;
-    background:var(--bg-1);
+    background:transparent;
+    opacity:0;
+    transition:opacity .6s ease;
   }
+  .proj-bg.video-ready .proj-video{opacity:1;}
+  .proj-bg.video-ready .proj-poster{opacity:0;transition:opacity .6s ease;}
   .proj-scrim{
     position:absolute;inset:0;
     background:
@@ -811,11 +839,11 @@
 
 <header class="hero" id="hero">
   <div class="hero-media" id="portraitTravel" aria-hidden="true">
-    <img class="hero-img" src="assets/hero1.png" alt="">
-    <img class="hero-img" src="assets/hero2.png" alt="">
-    <img class="hero-img" src="assets/hero3.png" alt="">
-    <img class="hero-img" src="assets/hero4.png" alt="">
-    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" poster="assets/teresa-poster.jpg" muted playsinline preload="auto" autoplay fetchpriority="high"></video>
+    <img class="hero-img" src="assets/hero/hero1.png" alt="">
+    <img class="hero-img" src="assets/hero/hero2.png" alt="">
+    <img class="hero-img" src="assets/hero/hero3.png" alt="">
+    <img class="hero-img" src="assets/hero/hero4.png" alt="">
+    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" poster="assets/teresa-poster.jpg" muted playsinline preload="auto" autoplay fetchpriority="low"></video>
   </div>
 
   <div class="wrap hero-grid">
@@ -903,7 +931,8 @@
   <div class="projects-stage">
     <!-- decorative full-bleed backdrop video -->
     <div class="proj-bg" aria-hidden="true">
-      <video class="proj-video" id="projVideo" src="assets/teresa_open_hands.mp4" poster="assets/teresa_open_hands-poster.jpg" autoplay muted loop playsinline preload="auto" fetchpriority="low"></video>
+      <img class="proj-poster" src="assets/teresa_open_hands.png" alt="">
+      <video class="proj-video" id="projVideo" src="assets/teresa_open_hands.mp4" poster="assets/teresa_open_hands-poster.jpg" autoplay muted loop playsinline preload="auto" fetchpriority="high"></video>
       <div class="proj-scrim"></div>
     </div>
 
@@ -1354,6 +1383,18 @@
 
 <script>
 (function(){
+  var bg    = document.querySelector('.proj-bg');
+  var video = document.getElementById('projVideo');
+  if(!bg || !video) return;
+
+  function markReady(){ bg.classList.add('video-ready'); }
+  video.addEventListener('canplay', markReady);
+  if(video.readyState >= 3){ markReady(); }
+})();
+</script>
+
+<script>
+(function(){
   var track   = document.getElementById('projTrack');
   var prevBtn = document.getElementById('projPrev');
   var nextBtn = document.getElementById('projNext');
@@ -1519,11 +1560,11 @@
 
 <script>
 /* -------------------------------------------------------------------
-   3D model viewer: three.js + the .glb are only fetched once the
-   #model section is about to enter the viewport. This keeps the
-   (fairly heavy) three.js bundle and model file completely off the
-   critical path so they never compete with either video for
-   bandwidth on first load.
+   3D model viewer: this is now the top loading priority on the page.
+   three.js + the .glb start fetching immediately on page load (see
+   initModelViewer() at the bottom of this block, plus the
+   rel="modulepreload"/rel="preload" fetchpriority="high" hints in
+   <head>), ahead of the projects-section video and the hero video.
 
    Note: an <script type="importmap"> in <head> maps the bare
    'three' specifier used internally by GLTFLoader.js/DRACOLoader.js/
@@ -1710,19 +1751,12 @@
     });
   }
 
-  if('IntersectionObserver' in window){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting){
-          initModelViewer();
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '400px 0px' });
-    io.observe(modelSection);
-  } else {
-    window.addEventListener('load', initModelViewer);
-  }
+  // Starts immediately rather than waiting for the #model section to
+  // scroll into view — the model is now the top loading priority on
+  // the page (see the preload/modulepreload hints in <head>), so its
+  // fetch should kick off as soon as possible instead of being gated
+  // behind scroll position.
+  initModelViewer();
 })();
 </script>
 
