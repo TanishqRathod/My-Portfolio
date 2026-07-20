@@ -8,6 +8,26 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <!--
+  Import map: required so the dynamically-imported three.js addon
+  modules (GLTFLoader.js, DRACOLoader.js, OrbitControls.js) can
+  resolve their internal `import * as THREE from 'three'` bare
+  specifier. Without this, that internal import throws, the
+  Promise.all(...) of dynamic imports rejects, and the viewer falls
+  into its generic "Could not load the 3D viewer" catch block even
+  though the .glb itself is fine. Must be declared before any script
+  that performs the import (works fine with dynamic import() from a
+  classic script, as long as it's present in the document first).
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<!--
   Preload hints: tell the browser about both videos as early as
   possible (before it has even parsed the <body>), but mark them
   with different fetchpriority so the hero video always wins the
@@ -765,7 +785,7 @@
 
 <header class="hero" id="hero">
   <div class="hero-media" id="portraitTravel" aria-hidden="true">
-    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" muted playsinline preload="auto" autoplay fetchpriority="high"></video>
+    <video class="hero-video" id="heroVideo" src="assets/teresa.mp4" poster="assets/teresa-poster.jpg" muted playsinline preload="auto" autoplay fetchpriority="high"></video>
   </div>
 
   <div class="wrap hero-grid">
@@ -853,7 +873,7 @@
   <div class="projects-stage">
     <!-- decorative full-bleed backdrop video -->
     <div class="proj-bg" aria-hidden="true">
-      <video class="proj-video" id="projVideo" src="assets/teresa_open_hands.mp4" autoplay muted loop playsinline preload="auto" fetchpriority="low"></video>
+      <video class="proj-video" id="projVideo" src="assets/teresa_open_hands.mp4" poster="assets/teresa_open_hands-poster.jpg" autoplay muted loop playsinline preload="auto" fetchpriority="low"></video>
       <div class="proj-scrim"></div>
     </div>
 
@@ -1165,10 +1185,26 @@
     if(p && p.catch) p.catch(function(){});
   }
 
+  // Only seek to a point in the video if that point has actually
+  // downloaded. Without this guard, fast scrolling during the
+  // scroll-scrub effect asks the browser to jump into an unbuffered
+  // region, which forces it to pause and wait on a network round
+  // trip — this is what shows up as the video "stopping halfway".
+  // Skipping the seek here just means the video catches up on the
+  // next scroll tick instead of stalling visibly.
+  function isBuffered(t){
+    var b = video.buffered;
+    for(var i = 0; i < b.length; i++){
+      if(t >= b.start(i) && t <= b.end(i)) return true;
+    }
+    return false;
+  }
+
   function seekTo(t){
     if(video.readyState < 1) return;
     if(!isFinite(t)) return;
     if(Math.abs(video.currentTime - t) < 0.008) return;
+    if(!isBuffered(t)) return;
     try{ video.currentTime = t; } catch(e){}
   }
 
@@ -1416,6 +1452,13 @@
    (fairly heavy) three.js bundle and model file completely off the
    critical path so they never compete with either video for
    bandwidth on first load.
+
+   Note: an <script type="importmap"> in <head> maps the bare
+   'three' specifier used internally by GLTFLoader.js/DRACOLoader.js/
+   OrbitControls.js — without it those addon modules fail to import
+   and this whole block falls into the outer .catch() below with the
+   generic "Could not load the 3D viewer" message, even though the
+   .glb file itself may be totally fine.
 ------------------------------------------------------------------- */
 (function(){
   var modelSection = document.getElementById('model');
